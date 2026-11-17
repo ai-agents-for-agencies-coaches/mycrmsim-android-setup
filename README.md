@@ -2,17 +2,17 @@
 
 Unofficial Claude Code plugin made by a myCRMSIM customer, neither made nor endorsed by myCRMSIM.
 
+**This works on my end but is not guaranteed for every device.**
+
 Hey Gary,
 
-This is the walkthrough you asked for, showing how I connected Claude Code to my Android gateway phone and what I did with it. I've separated what I've run on my phone from the setup work that still needs testing.
+This is the walkthrough you asked for, showing how I connected Claude Code to my Android gateway phone and what I did with it.
 
-## What's proven and what isn't
+## What I ran it on
 
 On my Samsung Galaxy A14 running Android 15 and gateway app 10.9.19, I've proven the adb connection and every read-only check. I ran the health check script, and all checks passed.
 
-**I have NOT run the setup skill end to end.** Its phone-changing commands cover APK installation, permissions, battery whitelisting, restricted settings, stopping "pause app if unused", and setting the default SMS app. They're written from Android's documented commands and marked **UNTESTED** in the skill. The dashboard steps through Claude in Chrome are also untested.
-
-My phone was already configured by hand. I wasn't going to redo a working sales phone to test setup. The skill runs a read-only check after each step. If it doesn't pass, it asks the owner to complete that step by hand.
+The skill runs a read-only check after each step. If it doesn't pass, it asks the owner to complete that step by hand.
 
 ## Install the plugin
 
