@@ -1,0 +1,7 @@
+{
+  "name": "mycrmsim-android-setup",
+  "description": "Unofficial. Lets Claude Code set up and health-check an Android phone running the myCRMSIM SMS Gateway app over USB (adb), and walk the myCRMSIM and HighLevel dashboards through Claude in Chrome.",
+  "version": "0.1.0",
+  "author": { "name": "George Roros" },
+  "keywords": ["mycrmsim", "sms-gateway", "android", "adb", "gohighlevel"]
+}

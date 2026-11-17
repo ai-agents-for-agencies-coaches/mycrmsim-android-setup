@@ -1,0 +1,11 @@
+{
+  "name": "mycrmsim-android-setup",
+  "owner": { "name": "George Roros" },
+  "plugins": [
+    {
+      "name": "mycrmsim-android-setup",
+      "source": "./",
+      "description": "Unofficial. Claude Code sets up and health-checks an Android phone running the myCRMSIM SMS Gateway app."
+    }
+  ]
+}

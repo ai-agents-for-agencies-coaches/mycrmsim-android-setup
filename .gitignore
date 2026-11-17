@@ -1,0 +1,9 @@
+.env
+.env.*
+*.json.secret
+*secrets*
+*.log
+*.jsonl
+*.apk
+message-ids.txt
+__pycache__/
