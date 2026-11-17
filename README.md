@@ -1,100 +1,132 @@
 # mycrmsim-android-setup
 
-Unofficial Claude Code plugin made by a myCRMSIM customer, neither made nor endorsed by myCRMSIM.
+Unofficial Claude Code plugin for setting up and health-checking an Android phone that runs the myCRMSIM SMS Gateway app. Not made or endorsed by myCRMSIM.
 
 **This works on my end but is not guaranteed for every device.**
 
-Hey Gary,
+## 1. Scope
 
-This is the walkthrough you asked for, showing how I connected Claude Code to my Android gateway phone and what I did with it.
+The plugin lets Claude Code do three things:
 
-## What I ran it on
+1. Connect to the gateway phone over USB with adb (Android Debug Bridge) and run read-only health checks.
+2. Walk the [myCRMSIM Android setup guide](https://support.mycrmsim.com/article/setting-up-your-android-device-with-mycrmsim-sms-gateway) from start to finish, using adb for the phone and Claude in Chrome for the myCRMSIM dashboard and the HighLevel connection.
+3. Watch the phone and re-read message statuses while a batch of texts goes out.
 
-On my Samsung Galaxy A14 running Android 15 and gateway app 10.9.19, I've proven the adb connection and every read-only check. I ran the health check script, and all checks passed.
+Out of scope: sending texts, storing credentials, rooting the phone, and any change to billing.
 
-The skill runs a read-only check after each step. If it doesn't pass, it asks the owner to complete that step by hand.
+## 2. Requirements
 
-## Install the plugin
+| Requirement | Used by |
+| --- | --- |
+| Claude Code | everything |
+| `adb` on the same computer as Claude Code | both skills, all scripts |
+| USB cable that carries data | both skills |
+| Claude in Chrome extension, with the owner signed in to the myCRMSIM dashboard and HighLevel | `gateway-setup` |
+| HighLevel private integration token in the `GHL_TOKEN` environment variable | `scripts/recheck_status.py` only |
+| Python 3, standard library only | `scripts/recheck_status.py` |
 
-You need Claude Code, Anthropic's coding agent that runs in a terminal, plus adb on the same computer and a USB data cable. adb means Android Debug Bridge.
+Gateway app package name: `com.mysmsgateway.v2`. Override it with the `GATEWAY_PKG` environment variable.
 
-For setup, you also need Claude in Chrome, Anthropic's browser extension that lets Claude click through pages in your own logged-in Chrome. You must already be logged in to the myCRMSIM dashboard and HighLevel.
+## 3. Install
 
 ```text
 /plugin marketplace add ai-agents-for-agencies-coaches/mycrmsim-android-setup
 /plugin install mycrmsim-android-setup@mycrmsim-android-setup
 ```
 
-Then say "check the gateway phone" or "set up this Android as a myCRMSIM gateway".
+Trigger phrases: "check the gateway phone", "set up this Android as a myCRMSIM gateway".
 
-## What the plugin does
+## 4. Components
 
-The plugin supplies two skills and three small scripts.
+| Path | Type | Writes to the phone | Purpose |
+| --- | --- | --- | --- |
+| `skills/gateway-health/SKILL.md` | skill | no | Connect over adb, run the health check, watch a batch |
+| `skills/gateway-setup/SKILL.md` | skill | yes, with owner approval per step | Run the 17 guide steps and verify each one |
+| `scripts/health_check.sh` | script | no | Prints `PASS`, `WARN` or `FAIL` per check. Exit 0 when nothing failed, 1 on a failure, 2 when adb is missing |
+| `scripts/watch_gateway.sh [seconds]` | script | no | Polls every 60 seconds by default. Prints one line only when the state changes |
+| `scripts/recheck_status.py <ids file>` | script | no | Reads one HighLevel message id per line and prints each status. Exit 1 when any message is `failed` |
 
-| Skill | What it does |
+## 5. Reference device
+
+| Field | Value |
 | --- | --- |
-| `gateway-health` | Checks the phone over USB using adb. It's read-only and changes nothing. |
-| `gateway-setup` | Walks [myCRMSIM's own 17-step Android setup guide](https://support.mycrmsim.com/article/setting-up-your-android-device-with-mycrmsim-sms-gateway) from start to finish, using adb for the phone and Claude in Chrome for the dashboard and HighLevel connection. |
+| Model | Samsung Galaxy A14 |
+| Android | 15 |
+| Gateway app version | 10.9.19 |
+| Result | adb connection made, `scripts/health_check.sh` run, all checks passed |
 
-| Script | What it does |
-| --- | --- |
-| `scripts/health_check.sh` | Runs read-only checks and prints PASS / WARN / FAIL per line. |
-| `scripts/watch_gateway.sh` | Checks every 60 seconds that the phone is connected and the gateway app is alive. Prints only when something changes. |
-| `scripts/recheck_status.py` | Re-reads HighLevel message statuses a couple of minutes after sending. Requires a HighLevel token in the `GHL_TOKEN` environment variable. |
+## 6. Connecting the phone
 
-## Connecting the phone
-
-These are the connection steps I used.
-
-1. On the phone, open Settings, About phone, Software information. Tap Build number 7 times.
-2. Open Settings, Developer options, and turn USB debugging on.
+1. On the phone: Settings, About phone, Software information, tap Build number 7 times.
+2. Settings, Developer options, turn USB debugging on.
 3. Plug the unlocked phone into the computer. Tap Allow on "Allow USB debugging?" and tick "Always allow from this computer".
+4. `adb devices` returns `device`.
 
-My snag was that adb showed `unauthorized`, but the Allow popup never appeared. Restarting adb and replugging didn't fix it. Turning USB debugging off and back on with the phone unlocked brought the popup up right away.
+Known issue: `adb devices` returns `unauthorized` and the Allow prompt never appears. Restarting adb and replugging did not clear it on the reference device. Turning USB debugging off and back on with the phone unlocked made the prompt appear.
 
-## Read-only checks
+## 7. Health checks
 
-These are the checks that passed on my phone.
+All checks are read-only.
 
-| Command | What a good result looks like |
-| --- | --- |
-| `adb devices` | `device` |
-| `adb shell pidof com.mysmsgateway.v2` | A process id, meaning the app is running. |
-| `adb shell cmd role get-role-holders android.app.role.SMS` | `com.mysmsgateway.v2`. The gateway is the default SMS app, so RCS in Google Messages or Samsung Messages cannot take replies. |
-| `adb shell am get-standby-bucket com.mysmsgateway.v2` | `5`, exempt from battery limits. |
-| `adb shell dumpsys deviceidle whitelist \| grep mysmsgateway` | Listed on the battery optimisation whitelist. |
-| `adb shell appops get com.mysmsgateway.v2` | `ACCESS_RESTRICTED_SETTINGS: allow` |
-| `adb shell dumpsys battery` | Charging, with power saving off. |
+| Check | Command | Pass condition |
+| --- | --- | --- |
+| Authorized | `adb get-state` | `device` |
+| App installed | `adb shell pm list packages` | package listed |
+| App running | `adb shell pidof com.mysmsgateway.v2` | a process id |
+| Default SMS app | `adb shell cmd role get-role-holders android.app.role.SMS` | `com.mysmsgateway.v2` |
+| Standby bucket | `adb shell am get-standby-bucket com.mysmsgateway.v2` | `5` (exempt from battery limits) |
+| Battery whitelist | `adb shell dumpsys deviceidle whitelist` | package listed |
+| Permissions | `adb shell dumpsys package com.mysmsgateway.v2` | SMS, phone state, call log, contacts and notifications show `granted=true` |
+| Restricted settings | `adb shell appops get com.mysmsgateway.v2` | `ACCESS_RESTRICTED_SETTINGS: allow` |
+| Power | `adb shell dumpsys battery` and `adb shell settings get global low_power` | charging, power saving off |
 
-## How the 17 steps are split
+The default SMS app check carries the RCS risk. RCS runs only inside Google Messages and Samsung Messages. When the gateway holds the SMS role, neither app can take an inbound reply.
 
-The setup skill divides the guide this way.
+## 8. Setup procedure
 
-| Who handles it | Guide steps |
-| --- | --- |
-| Claude over adb | Download and install the app (3 and 4), permissions and battery (6), restricted settings and app pausing (7), default SMS app (15). |
-| Claude in Chrome | Add the device (9), SIM assignment (10 to 13), message routing (14). |
-| Owner by hand | Play Protect off (1), RCS off (2), scan the login QR code (8), Keep Alive in Background and Sync Received switches (16), approve the test text (17). |
+Step numbers match the myCRMSIM guide. After every step the skill runs the verification listed. When verification does not pass, the skill stops and asks the owner to do that step by hand.
 
-## Guard rails in the skills
+| Guide step | Actor | Method | Verification |
+| --- | --- | --- | --- |
+| Prerequisite: HighLevel connected, sub-account added | Claude in Chrome, owner signs in and approves | myCRMSIM dashboard | sub-account is listed |
+| 1. Play Protect off | Owner | Play Store, profile icon, Play Protect | `adb shell settings get global package_verifier_user_consent` |
+| 2. RCS off | Owner | Messages app settings, as in the guide | SMS role check after step 15 |
+| 3 and 4. Download and install | Claude, adb | APK from `https://get.mysmsgateway.app`, then `adb install -r` | package listed |
+| 5. Home screen shortcut | skipped | optional in the guide | none |
+| 6. Permissions and battery | Claude, adb | `adb shell pm grant` per runtime permission, `adb shell dumpsys deviceidle whitelist +<package>` | `granted=true` lines, whitelist entry |
+| 7. Restricted settings, app pausing | Claude, adb | `adb shell appops set <package> ACCESS_RESTRICTED_SETTINGS allow`, `adb shell appops set <package> AUTO_REVOKE_PERMISSIONS_IF_UNUSED ignore` | `adb shell appops get <package>` |
+| 8. Log in on the phone | Owner | scans the QR code shown in step 9 | app shows logged in |
+| 9. Add the device | Claude in Chrome | Devices, Android Devices, Add New Device, name it, Save | device row shows Active |
+| 10 to 13. SIM assignment | Claude in Chrome | Subaccount SIM, Assign SIMs, Workspace SIM, optional per-user SIMs | assignment rows match what the owner named |
+| 14. Message routing | Claude in Chrome | Message Routing, SMS in the order the owner wants, Save | saved order read back to the owner |
+| 15. Default SMS app | Claude, adb | `adb shell cmd role add-role-holder android.app.role.SMS <package>` | role holder is the gateway |
+| 16. In-app switches | Owner | Keep Alive in Background on, Sync Received on, SIM choice on dual SIM | owner confirms, app still running |
+| 17. Test | Owner approves, Claude verifies | one text from the CRM to the owner's own number | status re-read after two minutes is not `failed`, reply shows in the CRM |
 
-Claude asks before every phone or dashboard change. The owner handles every login. Claude never types, reads out or stores a password, login token, API key or QR code.
+The skill file marks which adb commands have not yet been confirmed on a device.
 
-No text goes out without approval of the exact words and recipient. The test text goes to the owner's own number. Device serials, phone numbers and contact names are never printed. USB debugging gets turned off at the end.
+## 9. Safety constraints
 
-## What I used it for
+1. Claude asks before every change to the phone or a dashboard.
+2. The owner does every login. Claude never types, reads out or stores a password, a login token, an API key or the contents of a QR code.
+3. No text is sent without the owner approving the exact words and the recipient. The test text goes to the owner's own number.
+4. The device serial, phone numbers and contact names are never printed or written to a file.
+5. Claude in Chrome never deletes a device, removes a SIM, disconnects HighLevel or opens a billing page.
+6. USB debugging is turned off when the work is finished.
 
-On Monday 16 Nov 2026, I ran a reactivation batch to old leads. I queued 98 texts and sent 56. I stopped because the list was colder than I wanted, which had nothing to do with the gateway.
+## 10. Observed behaviour
 
-Texts went through the HighLevel API to the gateway. The first 20 were 3 to 5 minutes apart, then a random 60 to 90 seconds apart. The watcher ran throughout. The phone stayed connected and the gateway app stayed up.
+Recorded on the reference device during one run of 56 texts on 16 Nov 2026. Texts went through the HighLevel API to the gateway, the first 20 spaced 3 to 5 minutes apart and the rest a random 60 to 90 seconds apart. The phone stayed connected and the gateway app stayed running for the whole run.
 
-## Field notes from a 56 text run
+| # | Observation | Handling |
+| --- | --- | --- |
+| 1 | One text failed and the carrier replied "You have been blocked from originating messages to [number]". Only that recipient was affected. Later texts still showed delivered. | Mark the contact do-not-text |
+| 2 | One send failed with "All channels failed: SMS: No_service". Cause not determined, either a brief loss of signal or a dead number. | Check signal, retry once by hand |
+| 3 | HighLevel reported `sent` about 8 seconds after sending. A `failed` status arrived later for the carrier-blocked text. | Re-read statuses after two minutes with `scripts/recheck_status.py` |
+| 4 | Most texts stayed at `sent`. 4 of 56 showed `delivered` when the send log read them. | Treat `sent` as normal and `failed` as the signal |
+| 5 | The myCRMSIM Custom Location API key only sends. The documented REST API answered 401 "Invalid or expired access token" because it expects an OAuth token. | Read statuses and replies from HighLevel |
+| 6 | `package_verifier_user_consent` read `1` while the gateway app was installed and sending. This is believed to mean Play Protect scanning was on. Not confirmed. | Follow guide step 1 for installs and updates |
 
-1. One recipient failed with "You have been blocked from originating messages to [number]". That affected only that recipient. Later texts still showed delivered.
-2. One send failed with "All channels failed: SMS: No_service". I don't know whether signal dropped briefly or the number was dead.
-3. HighLevel shows "sent" about 8 seconds after sending. The carrier-blocked text showed sent then failed later, which is why `recheck_status.py` exists.
-4. Most texts stayed at "sent". Only 4 of 56 showed "delivered" when the send log read them.
-5. The Custom Location API key only sends. The documented myCRMSIM REST API returned 401 "Invalid or expired access token", because it wants OAuth. I read statuses and replies from HighLevel.
-6. `package_verifier_user_consent` reads `1` on my sending phone. I believe that means Play Protect scanning is on, but haven't confirmed it.
+## 11. License
 
-License: MIT.
+MIT.
